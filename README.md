@@ -1,4 +1,4 @@
-<a href="https://dmonskull.github.io"><img src="assets/banner.svg" width="100%" alt="DMONSKULL. modding tools for xbox 360 and og xbox, game reverse engineering, and the odd mac app."></a>
+<a href="https://dmonskull.github.io"><img src="assets/banner.svg" width="100%" alt="DMONSKULL. i do reverse engineering. i come from xbox 360 RE."></a>
 
 <p align="center">
   <a href="https://dmonskull.github.io"><img src="assets/button-site.svg" height="44" alt="dmonskull.github.io"></a>
