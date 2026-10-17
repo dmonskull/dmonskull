@@ -1,9 +1,8 @@
-"""daily job: draws the stats card and refreshes the recent repos list in the readme"""
+"""daily job: draws the stats card"""
 
 import argparse
 import json
 import os
-import re
 import subprocess
 import urllib.request
 from datetime import datetime, timezone
@@ -29,7 +28,6 @@ query ($login: String!) {
   }
 }
 """
-RECENT = 4
 
 
 def token():
@@ -62,11 +60,6 @@ def visible(color):
         return color
     k = .55 * (1 - lum / .25)
     return "#" + "".join(f"{round((c + (1 - c) * k) * 255):02x}" for c in (r, g, b))
-
-
-def short_date(iso, now):
-    d = datetime.fromisoformat(iso.replace("Z", "+00:00"))
-    return f"{d:%b} {d.day}".lower() if d.year == now.year else f"{d:%b} {d.year}".lower()
 
 
 def stats_card(user, now):
@@ -136,31 +129,10 @@ def stats_card(user, now):
     return svg(w, h, "\n  ".join(out), f"github stats: {summary}", style)
 
 
-def recent_list(user, now):
-    lines = []
-    for r in [r for r in own_projects(user) if not r["isArchived"]][:RECENT]:
-        desc = " ".join((r["description"] or "").split())
-        if len(desc) > 120:
-            desc = desc[:118].rsplit(" ", 1)[0].rstrip(",.;:") + "…"
-        meta = " · ".join(x for x in [r["primaryLanguage"] and r["primaryLanguage"]["name"].lower(),
-                                       f"updated {short_date(r['pushedAt'], now)}"] if x)
-        lines.append(f"- **[{r['name']}]({r['url']})**" + (f" · {desc}" if desc else "") + f" <sub>{meta}</sub>")
-    return "\n".join(lines)
-
-
-def update_readme(path, block):
-    readme = path.read_text()
-    new = re.sub(r"(<!-- recent:start -->).*?(<!-- recent:end -->)", lambda m: f"{m[1]}\n{block}\n{m[2]}", readme, flags=re.S)
-    if new != readme:
-        path.write_text(new)
-    return new != readme
-
-
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--login", default=os.environ.get("LOGIN", "dmonskull"))
     ap.add_argument("--out", default="dist")
-    ap.add_argument("--readme", default="README.md")
     args = ap.parse_args()
 
     now = datetime.now(timezone.utc)
@@ -168,5 +140,4 @@ if __name__ == "__main__":
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     (out / "stats.svg").write_text(stats_card(user, now))
-    changed = update_readme(Path(args.readme), recent_list(user, now))
-    print(f"stats card written, readme {'updated' if changed else 'unchanged'}")
+    print("stats card written")
