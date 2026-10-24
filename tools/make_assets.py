@@ -69,6 +69,6 @@ if __name__ == "__main__":
     OUT.mkdir(exist_ok=True)
     banner()
     button("site", "dmonskull.github.io ↗", ACCENT, BG)
-    button("discord", "join the OG360 discord ↗", BG, TEXT, stroke=LINE_STRONG, icon=DISCORD)
+    button("discord", "join my discord ↗", BG, TEXT, stroke=LINE_STRONG, icon=DISCORD)
     for p in sorted(OUT.glob("*.svg")):
         print(f"{p.name:22} {p.stat().st_size / 1024:.1f} KB")

@@ -3,7 +3,7 @@
 <p align="center">
   <a href="https://dmonskull.github.io"><img src="assets/button-site.svg" height="44" alt="dmonskull.github.io"></a>
   &nbsp;
-  <a href="https://discord.gg/nNuVcxC2kz"><img src="assets/button-discord.svg" height="44" alt="join the OG360 discord"></a>
+  <a href="https://discord.gg/nNuVcxC2kz"><img src="assets/button-discord.svg" height="44" alt="join my discord"></a>
 </p>
 
 <br>
@@ -15,4 +15,4 @@
   <img src="https://raw.githubusercontent.com/dmonskull/dmonskull/output/snake-light.svg" width="100%" alt="contribution graph being eaten by a snake">
 </picture>
 
-<p align="center"><sub>questions, updates, early builds → <a href="https://discord.gg/nNuVcxC2kz">join the discord</a> · everything else → <a href="https://dmonskull.github.io">dmonskull.github.io</a></sub></p>
+<p align="center"><sub>questions, updates, early builds → <a href="https://discord.gg/nNuVcxC2kz">join my discord</a> · everything else → <a href="https://dmonskull.github.io">dmonskull.github.io</a></sub></p>
