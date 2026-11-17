@@ -1,4 +1,4 @@
-<a href="https://dmonskull.github.io"><img src="assets/banner.svg" width="100%" alt="DMON. reverse engineering, console modding, game hacking, tooling and development"></a>
+<a href="https://dmonskull.github.io"><img src="assets/banner.svg" width="100%" alt="DMON. reverse engineering, console modding, tooling and development"></a>
 
 <p align="center">
   <a href="https://dmonskull.github.io"><img src="assets/button-site.svg" height="44" alt="dmonskull.github.io"></a>
