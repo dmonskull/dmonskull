@@ -8,7 +8,8 @@ import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
-from svgtext import (ACCENT, FAINT, LINE, LINE_STRONG, MUTED, TEXT, backdrop, face, svg, text, width)
+from svgtext import (BG, CHART, GLASS, HALO, INK, cap_height, face, glow, grain, name_gradient, orbit, svg, text,
+                     width)
 
 QUERY = """
 query ($login: String!) {
@@ -52,21 +53,12 @@ def own_projects(user):
     return [r for r in user["repositories"]["nodes"] if r["name"].lower() not in skip]
 
 
-def visible(color):
-    """some language colors (lua is navy) vanish on the dark card, so lift the darkest ones toward white"""
-    r, g, b = (int(color.lstrip("#")[i:i + 2], 16) / 255 for i in (0, 2, 4))
-    lum = .2126 * r + .7152 * g + .0722 * b
-    if lum >= .25:
-        return color
-    k = .55 * (1 - lum / .25)
-    return "#" + "".join(f"{round((c + (1 - c) * k) * 255):02x}" for c in (r, g, b))
-
-
 def stats_card(user, now):
+    """the stats in the dmon site style: dark card, violet haze from below, one orbit, glass label"""
     repos = own_projects(user)
-    w, h, pad = 1200, 360, 64
+    w, h, pad = 1200, 380, 64
     mono = face("mono", wght=500)
-    big = face("archivo", wght=800, wdth=112)
+    sans = face("outfit", wght=500)
 
     releases = [(r["latestRelease"], r["name"]) for r in repos if r["latestRelease"]]
     latest = max(releases, key=lambda x: x[0]["publishedAt"], default=None)
@@ -77,56 +69,65 @@ def stats_card(user, now):
         (latest[0]["tagName"], f"LATEST: {latest[1].upper()}") if latest else ("none", "LATEST RELEASE"),
     ]
 
-    out = [backdrop(w, h, w - 120, h + 80, uid="s")]
-    out.append(f'<circle class="ring" cx="{pad + 6}" cy="77" r="5" fill="{ACCENT}"/><circle cx="{pad + 6}" cy="77" r="5" fill="{ACCENT}"/>')
-    out.append(text(mono, "GITHUB STATS", pad + 22, 83, 16, MUTED, tracking=.08))
-    out.append(text(mono, f"UPDATED {now:%b} {now.day}, {now.year}".upper(), w - pad, 83, 15, FAINT, tracking=.08, anchor="end"))
+    gdefs, gbody = glow("g", w, h, w / 2, h + 230, 780, 420)
+    ndefs, nbody = grain("grain", w, h)
+    out = [f'<defs>{gdefs}{ndefs}{name_gradient("num")}{HALO}<clipPath id="clip"><rect width="{w}" height="{h}" rx="22"/></clipPath></defs>',
+           '<g clip-path="url(#clip)">', f'<rect width="{w}" height="{h}" fill="{BG}"/>', gbody,
+           orbit(w / 2 + 60, h + 150, 760, 250, -5, 74, .3, opacity=.14), nbody]
+
+    # glass label like the site's PINNED pill, and the date across from it
+    label, size, track = "GITHUB STATS", 13, .14
+    lw = width(mono, label, size, track)
+    out.append(f'<rect x="{pad}" y="40" width="{lw + 30:.0f}" height="34" rx="17" fill="{GLASS}" fill-opacity=".8" stroke="{INK}" stroke-opacity=".12"/>')
+    out.append(text(mono, label, pad + 15, 57 + cap_height(mono, size) / 2, size, INK, tracking=track, opacity=.88))
+    out.append(text(mono, f"UPDATED {now:%b} {now.day}, {now.year}".upper(), w - pad, 57 + cap_height(mono, 13) / 2, 13, INK,
+                    tracking=.09, anchor="end", opacity=.5))
 
     col = (w - 2 * pad) / len(stats)
     for i, (value, label) in enumerate(stats):
         x = pad + i * col
-        size = 62
-        while width(big, value, size, -.02) > col - 24 and size > 24:
+        size = 66
+        while width(sans, value, size, -.04) > col - 28 and size > 24:
             size -= 2
-        out.append(text(big, value, x, 172, size, TEXT, tracking=-.02))
-        out.append(text(mono, label, x, 206, 14, MUTED, tracking=.06))
+        out.append(text(sans, value, x, 182, size, "url(#num)", tracking=-.04))
+        out.append(text(mono, label, x, 214, 13, INK, tracking=.09, opacity=.7))
         if i:
-            out.append(f'<path d="M{x - 20:.0f} 118V208" stroke="{LINE}"/>')
+            out.append(f'<path d="M{x - 22:.0f} 126V218" stroke="{INK}" stroke-opacity=".1"/>')
 
-    # top languages by code size
+    # top languages by code size, shaded in the site violets instead of github colors
     sizes = {}
     for r in repos:
         for e in r["languages"]["edges"]:
-            n = e["node"]
-            sizes.setdefault(n["name"], [0, visible(n["color"]) if n["color"] else FAINT])[0] += e["size"]
-    ranked = sorted(sizes.items(), key=lambda kv: -kv[1][0])
-    total = sum(v[0] for _, v in ranked) or 1
-    top = [(name, v[0] / total, v[1]) for name, v in ranked[:5]]
-    rest = 1 - sum(p for _, p, _ in top)
+            sizes[e["node"]["name"]] = sizes.get(e["node"]["name"], 0) + e["size"]
+    ranked = sorted(sizes.items(), key=lambda kv: -kv[1])
+    total = sum(v for _, v in ranked) or 1
+    top = [(name, v / total) for name, v in ranked[:5]]
+    rest = 1 - sum(p for _, p in top)
     if rest > .005:
-        top.append(("Other", rest, LINE_STRONG))
+        top.append(("Other", rest))
+    top = [(name, p, CHART[i]) for i, (name, p) in enumerate(top)]
 
-    out.append(f'<path d="M{pad} 240H{w - pad}" stroke="{LINE}" stroke-dasharray="4 5"/>')
-    out.append(text(mono, "TOP LANGUAGES", pad, 277, 14, MUTED, tracking=.08))
+    out.append(f'<path d="M{pad} 252H{w - pad}" stroke="{INK}" stroke-opacity=".1"/>')
+    out.append(text(mono, "TOP LANGUAGES", pad, 290, 13, INK, tracking=.09, opacity=.7))
     bar_w, x = w - 2 * pad, pad
-    out.append(f'<clipPath id="bar"><rect x="{pad}" y="290" width="{bar_w}" height="10" rx="5"/></clipPath><g clip-path="url(#bar)">')
+    out.append(f'<clipPath id="bar"><rect x="{pad}" y="304" width="{bar_w}" height="8" rx="4"/></clipPath><g clip-path="url(#bar)">')
+    out.append(f'<rect x="{pad}" y="304" width="{bar_w}" height="8" fill="{INK}" fill-opacity=".08"/>')
     for name, p, color in top:
         seg = bar_w * p
-        out.append(f'<rect x="{x:.1f}" y="290" width="{seg + .5:.1f}" height="10" fill="{color}"/>')
+        out.append(f'<rect x="{x:.1f}" y="304" width="{seg + .5:.1f}" height="8" fill="{color}"/>')
         x += seg
     out.append("</g>")
     x = pad
     for name, p, color in top:
-        label = f"{name} {p * 100:.0f}%" if p >= .01 else f"{name} <1%"
-        out.append(f'<circle cx="{x + 6}" cy="327" r="6" fill="{color}"/>')
-        out.append(text(mono, label, x + 20, 333, 16, TEXT))
-        x += 20 + width(mono, label, 16) + 32
+        label = (f"{name} {p * 100:.0f}%" if p >= .01 else f"{name} <1%").upper()
+        out.append(f'<circle cx="{x + 4}" cy="341" r="4" fill="{color}"/>')
+        out.append(text(mono, label, x + 16, 341 + cap_height(mono, 14) / 2, 14, INK, tracking=.08, opacity=.85))
+        x += 16 + width(mono, label, 14, .08) + 30
 
-    style = """
-    .ring { transform-box: fill-box; transform-origin: center; animation: ring 2.4s ease-out infinite; }
-    @keyframes ring { 0% { transform: scale(1); opacity: .7; } 100% { transform: scale(3.2); opacity: 0; } }"""
+    out.append("</g>")
+    out.append(f'<rect x=".5" y=".5" width="{w - 1}" height="{h - 1}" rx="21.5" fill="none" stroke="{INK}" stroke-opacity=".1"/>')
     summary = ", ".join(f"{v} {l.lower()}" for v, l in stats)
-    return svg(w, h, "\n  ".join(out), f"github stats: {summary}", style)
+    return svg(w, h, "\n  ".join(out), f"github stats: {summary}")
 
 
 if __name__ == "__main__":

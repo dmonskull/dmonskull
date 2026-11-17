@@ -1,5 +1,6 @@
 """turns text into svg paths using the real fonts, so the images look the same on every device
-(github shows readme svgs as images, and images cant load web fonts)"""
+(github shows readme svgs as images, and images cant load web fonts).
+also holds the look shared with the dmon site: colors, the violet glow, the orbits and the grain"""
 
 from functools import lru_cache
 from pathlib import Path
@@ -11,18 +12,16 @@ from fontTools.ttLib import TTFont
 from fontTools.varLib.instancer import instantiateVariableFont
 
 FONTS = Path(__file__).parent / "fonts"
-FILES = {"archivo": "Archivo.ttf", "mono": "JetBrainsMono.ttf"}
+FILES = {"outfit": "Outfit.ttf", "mono": "JetBrainsMono.ttf"}
 
-# same palette as dmonskull.github.io
-BG = "#0a0b09"
-SURFACE = "#111310"
-LINE = "#252a21"
-LINE_STRONG = "#353b2f"
-TEXT = "#eef1e8"
-MUTED = "#a0a797"
-FAINT = "#676e5f"
-ACCENT = "#a6ff3d"
-ACCENT_TEXT = "#b8ff66"
+# same palette as the dmon site
+BG = "#08070b"
+INK = "#f3eeff"
+ACCENT = "#bca9fb"
+GLASS = "#0d0b14"
+SHADE = "#120c24"  # orbit ink on top of the bright core
+GLOW_STOPS = [(0, "#f3eeff"), (.15, "#bca9fb"), (.32, "#7d5fe0"), (.5, "#3a2785"), (.7, "#150f2b"), (.9, BG)]
+CHART = ["#f3eeff", "#bca9fb", "#9b84f2", "#7d5fe0", "#5a42b4", "#3a2785"]  # brightest first
 
 
 def num(v):
@@ -82,47 +81,93 @@ def path_d(f, text, x, y, size, tracking=0):
     return pen.getCommands()
 
 
-def text(f, txt, x, y, size, fill, tracking=0, anchor="start", extra=""):
+def text(f, txt, x, y, size, fill, tracking=0, anchor="start", opacity=None):
     """one <path> for a line of text. anchor works like svg text-anchor"""
     if anchor != "start":
         w = width(f, txt, size, tracking)
         x -= w if anchor == "end" else w / 2
     d = path_d(f, txt, x, y, size, tracking)
-    return f'<path fill="{fill}"{extra} d="{d}"/>' if d else ""
+    op = f' fill-opacity="{opacity}"' if opacity is not None else ""
+    return f'<path fill="{fill}"{op} d="{d}"/>' if d else ""
 
 
-def runs(parts, x, y, size, tracking=0):
-    """several pieces on one line, each (face, text, fill). returns (svg, end_x)"""
-    out = []
-    for f, txt, fill in parts:
-        out.append(text(f, txt, x, y, size, fill, tracking))
-        x += width(f, txt, size, tracking) + tracking * size
-    return "".join(out), x
+def name_gradient(uid):
+    """the light violet to white fill the site uses on DMON (css linear-gradient 105deg)"""
+    return (f'<linearGradient id="{uid}" x1="0" y1=".37" x2="1" y2=".63">'
+            '<stop offset="0" stop-color="#c9b9ff"/><stop offset=".48" stop-color="#f3eeff"/>'
+            '<stop offset="1" stop-color="#fff"/></linearGradient>')
 
 
-def backdrop(w, h, glow_x, glow_y, radius=24, uid="b"):
-    """the dark card with the faint grid and green glow used on the site"""
-    return f"""<defs>
-    <clipPath id="{uid}-clip"><rect width="{w}" height="{h}" rx="{radius}"/></clipPath>
-    <pattern id="{uid}-grid" width="48" height="48" patternUnits="userSpaceOnUse"><path d="M48 0H0V48" fill="none" stroke="#ffffff" stroke-opacity=".035"/></pattern>
-    <radialGradient id="{uid}-glow" cx="{glow_x}" cy="{glow_y}" r="{max(w, h) * .6:.0f}" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="{ACCENT}" stop-opacity=".16"/><stop offset="1" stop-color="{ACCENT}" stop-opacity="0"/>
-    </radialGradient>
-    <linearGradient id="{uid}-fade" x1="0" y1="0" x2="0" y2="1"><stop offset=".2" stop-color="#fff"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
-    <mask id="{uid}-mask"><rect width="{w}" height="{h}" fill="url(#{uid}-fade)"/></mask>
-  </defs>
-  <g clip-path="url(#{uid}-clip)">
-    <rect width="{w}" height="{h}" fill="{BG}"/>
-    <rect width="{w}" height="{h}" fill="url(#{uid}-grid)" mask="url(#{uid}-mask)"/>
-    <rect class="glow" width="{w}" height="{h}" fill="url(#{uid}-glow)"/>
-  </g>
-  <rect x=".5" y=".5" width="{w - 1}" height="{h - 1}" rx="{radius - .5}" fill="none" stroke="{LINE}"/>"""
+def _ellipse_gradient(gid, cx, cy, rx, ry, stops):
+    s = "".join(f'<stop offset="{o}" stop-color="{c}"/>' for o, c in stops)
+    return (f'<radialGradient id="{gid}" cx="{cx}" cy="{cy}" r="{rx}" gradientUnits="userSpaceOnUse" '
+            f'gradientTransform="translate({cx} {cy}) scale(1 {ry / rx:.4f}) translate({-cx} {-cy})">{s}</radialGradient>')
+
+
+def glow(uid, w, h, cx, cy, rx, ry, breathe=True):
+    """the violet glow, bent by noise so it isnt a perfect ellipse. returns (defs, body).
+    also defines masks {uid}-in and {uid}-out for the bright core, so orbits can switch ink there like the site does"""
+    big = f'x="-200" y="-200" width="{w + 400}" height="{h + 400}"'
+    defs = "".join([
+        _ellipse_gradient(f"{uid}-g", cx, cy, rx, ry, GLOW_STOPS),
+        _ellipse_gradient(f"{uid}-c", cx, cy, rx, ry, [(.26, "#fff"), (.3, "#000")]),
+        _ellipse_gradient(f"{uid}-ci", cx, cy, rx, ry, [(.26, "#000"), (.3, "#fff")]),
+        f'<filter id="{uid}-warp" filterUnits="userSpaceOnUse" {big}>'
+        '<feTurbulence type="fractalNoise" baseFrequency=".0032" numOctaves="2" seed="11"/>'
+        '<feDisplacementMap in="SourceGraphic" scale="80" xChannelSelector="R" yChannelSelector="G"/></filter>',
+        f'<mask id="{uid}-in" maskUnits="userSpaceOnUse" {big}><rect {big} fill="url(#{uid}-c)" filter="url(#{uid}-warp)"/></mask>',
+        f'<mask id="{uid}-out" maskUnits="userSpaceOnUse" {big}><rect {big} fill="url(#{uid}-ci)" filter="url(#{uid}-warp)"/></mask>',
+    ])
+    cls = ' class="breathe"' if breathe else ""
+    body = f'<g{cls}><rect {big} fill="url(#{uid}-g)" filter="url(#{uid}-warp)"/></g>'
+    return defs, body
+
+
+def grain(uid, w, h):
+    """film grain like the site, it also hides banding in the dark gradient. returns (defs, body)"""
+    defs = (f'<filter id="{uid}" x="0" y="0" width="100%" height="100%">'
+            '<feTurbulence type="fractalNoise" baseFrequency=".85" numOctaves="2" stitchTiles="stitch" seed="5"/>'
+            '<feColorMatrix type="matrix" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  .12 0 0 0 -.04"/></filter>')
+    return defs, f'<rect width="{w}" height="{h}" filter="url(#{uid})"/>'
+
+
+def orbit(cx, cy, rx, ry, rot, period, phase, mask_out=None, mask_in=None, opacity=.24):
+    """one hairline orbit with a node going round it and a short comet tail behind the node.
+    light ink on the dark, and dark ink inside mask_in (the bright core) like the site"""
+    d = f"M{rx} 0A{rx} {ry} 0 1 1 {-rx} 0A{rx} {ry} 0 1 1 {rx} 0"
+    begin = f"-{phase * period:.2f}s"
+    timing = f'dur="{period}s" begin="{begin}" repeatCount="indefinite"'
+
+    def layer(ink, line_op, halo):
+        tail = ""
+        for length, op in ((150, .14), (70, .28), (28, .5)):
+            tail += (f'<path d="{d}" fill="none" stroke="{ink}" stroke-opacity="{op}" stroke-width="1.6" stroke-linecap="round" '
+                     f'pathLength="1000" stroke-dasharray="{length} {1000 - length}">'
+                     f'<animate attributeName="stroke-dashoffset" values="{length};{length - 1000}" {timing}/></path>')
+        node = f'<circle r="3.4" fill="{ink}"><animateMotion path="{d}" {timing}/></circle>'
+        if halo:
+            node = f'<circle r="18" fill="url(#halo)"><animateMotion path="{d}" {timing}/></circle>' + node
+        return (f'<g transform="translate({cx} {cy}) rotate({rot})">'
+                f'<path d="{d}" fill="none" stroke="{ink}" stroke-opacity="{line_op}" stroke-width="1.2"/>{tail}{node}</g>')
+
+    out = layer(INK, opacity, True)
+    if mask_out:
+        out = f'<g mask="url(#{mask_out})">{out}</g>'
+    if mask_in:
+        out += f'<g mask="url(#{mask_in})">{layer(SHADE, .5, False)}</g>'
+    return out
+
+
+HALO = ('<radialGradient id="halo"><stop offset="0" stop-color="#b9a3ff" stop-opacity=".6"/>'
+        '<stop offset="1" stop-color="#b9a3ff" stop-opacity="0"/></radialGradient>')
 
 
 def svg(w, h, body, title, style=""):
     return f"""<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}" viewBox="0 0 {w} {h}" role="img" aria-label="{title}">
   <title>{title}</title>
-  <style>{style}
+  <style>
+    .breathe {{ transform-box: view-box; transform-origin: 50% 80%; animation: breathe 11s ease-in-out infinite alternate; }}
+    @keyframes breathe {{ from {{ transform: scale(1); }} to {{ transform: scale(1.06) translateY(-6px); }} }}{style}
     @media (prefers-reduced-motion: reduce) {{ * {{ animation: none !important; }} }}
   </style>
   {body}
